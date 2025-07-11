@@ -11,8 +11,8 @@ interface N8NWebhookPayload {
 }
 
 class N8NService {
-  private readonly testUrl = import.meta.env.VITE_N8N_TEST_URL || 'https://mzm987.app.n8n.cloud/webhook-test/proposal-upload';
-  private readonly productionUrl = import.meta.env.VITE_N8N_PRODUCTION_URL || 'https://mzm987.app.n8n.cloud/webhook/proposal-upload';
+  private readonly testUrl = import.meta.env.VITE_N8N_TEST_URL || 'https://mzm836987q3287.app.n8n.cloud/webhook-test/proposal-upload';
+  private readonly productionUrl = import.meta.env.VITE_N8N_PRODUCTION_URL || 'https://mzm836987q3287.app.n8n.cloud/webhook/proposal-upload';
   private readonly isDevelopment = import.meta.env.DEV;
 
   private get webhookUrl() {
@@ -21,10 +21,13 @@ class N8NService {
 
   async sendWebhook(payload: N8NWebhookPayload): Promise<void> {
     try {
+      console.log('Sending N8N webhook:', payload.action, 'to', this.webhookUrl);
+      
       const response = await fetch(this.webhookUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'User-Agent': 'Pocketlaw-Dashboard/1.0.0',
         },
         body: JSON.stringify(payload),
       });
@@ -33,7 +36,8 @@ class N8NService {
         throw new Error(`N8N webhook failed: ${response.status} ${response.statusText}`);
       }
 
-      console.log('N8N webhook sent successfully:', payload.action);
+      const responseData = await response.text();
+      console.log('N8N webhook sent successfully:', payload.action, responseData);
     } catch (error) {
       console.error('Error sending N8N webhook:', error);
       // Don't throw error to prevent breaking the main flow
@@ -59,6 +63,70 @@ class N8NService {
           size: document.fileSize,
           folderId: document.folderId,
           tags: document.tags,
+          url: document.fileUrl,
+          status: document.status,
+          priority: document.priority,
+        },
+      },
+    });
+  }
+
+  async documentViewed(user: any, document: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'document_viewed',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        document: {
+          id: document.id,
+          name: document.name,
+          type: document.type,
+        },
+      },
+    });
+  }
+
+  async documentDownloaded(user: any, document: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'document_downloaded',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        document: {
+          id: document.id,
+          name: document.name,
+          type: document.type,
+          size: document.fileSize,
+        },
+      },
+    });
+  }
+
+  async documentDeleted(user: any, document: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'document_deleted',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        document: {
+          id: document.id,
+          name: document.name,
+          type: document.type,
         },
       },
     });
@@ -105,6 +173,27 @@ class N8NService {
     });
   }
 
+  async documentEdited(user: any, document: any, changes: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'document_edited',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        document: {
+          id: document.id,
+          name: document.name,
+          type: document.type,
+        },
+        changes,
+      },
+    });
+  }
+
   // Task Events
   async taskCreated(user: any, task: any): Promise<void> {
     await this.sendWebhook({
@@ -120,10 +209,33 @@ class N8NService {
         task: {
           id: task.id,
           title: task.title,
+          description: task.description,
           priority: task.priority,
           assignedTo: task.assignedTo,
           dueDate: task.dueDate,
+          status: task.status,
         },
+      },
+    });
+  }
+
+  async taskUpdated(user: any, task: any, changes: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'task_updated',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        task: {
+          id: task.id,
+          title: task.title,
+          status: task.status,
+        },
+        changes,
       },
     });
   }
@@ -143,6 +255,26 @@ class N8NService {
           id: task.id,
           title: task.title,
           completedAt: new Date().toISOString(),
+          actualHours: task.actualHours,
+        },
+      },
+    });
+  }
+
+  async taskDeleted(user: any, task: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'task_deleted',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        task: {
+          id: task.id,
+          title: task.title,
         },
       },
     });
@@ -188,6 +320,22 @@ class N8NService {
     });
   }
 
+  async userProfileUpdated(user: any, changes: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'user_profile_updated',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        changes,
+      },
+    });
+  }
+
   // Template Events
   async templateCreated(user: any, template: any): Promise<void> {
     await this.sendWebhook({
@@ -205,6 +353,7 @@ class N8NService {
           name: template.name,
           category: template.category,
           isPublic: template.isPublic,
+          variables: template.variables?.length || 0,
         },
       },
     });
@@ -230,6 +379,66 @@ class N8NService {
     });
   }
 
+  async templateDeleted(user: any, template: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'template_deleted',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        template: {
+          id: template.id,
+          name: template.name,
+          category: template.category,
+        },
+      },
+    });
+  }
+
+  // Folder Events
+  async folderCreated(user: any, folder: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'folder_created',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        folder: {
+          id: folder.id,
+          name: folder.name,
+          parentId: folder.parentId,
+        },
+      },
+    });
+  }
+
+  async folderDeleted(user: any, folder: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'folder_deleted',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        folder: {
+          id: folder.id,
+          name: folder.name,
+        },
+      },
+    });
+  }
+
   // Proposal Events (Custom for your workflow)
   async proposalUploaded(user: any, proposal: any): Promise<void> {
     await this.sendWebhook({
@@ -247,10 +456,45 @@ class N8NService {
           name: proposal.name,
           type: proposal.type,
           size: proposal.fileSize,
-          clientId: proposal.clientId,
-          projectId: proposal.projectId,
+          url: proposal.fileUrl,
           status: proposal.status,
+          tags: proposal.tags,
+          priority: proposal.priority,
         },
+      },
+    });
+  }
+
+  // System Events
+  async systemLogin(user: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'user_login',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        loginTime: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+      },
+    });
+  }
+
+  async systemLogout(user: any): Promise<void> {
+    await this.sendWebhook({
+      action: 'user_logout',
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      data: {
+        logoutTime: new Date().toISOString(),
       },
     });
   }

@@ -1,5 +1,4 @@
-import { supabase } from '../lib/supabase';
-import { v4 as uuidv4 } from 'uuid';
+import { n8nService } from './n8nService';
 
 export interface TaskData {
   id: string;
@@ -30,33 +29,68 @@ export interface CreateTaskData {
 }
 
 class TaskService {
+  private mockTasks: TaskData[] = [
+    {
+      id: '1',
+      title: 'Review TechCorp Service Agreement',
+      description: 'Legal review required for annual service agreement with TechCorp',
+      status: 'in_progress',
+      priority: 'high',
+      dueDate: new Date('2024-01-25').toISOString(),
+      assignedTo: 'Umar',
+      assignedBy: 'Legal Team',
+      createdAt: new Date('2024-01-20').toISOString(),
+      updatedAt: new Date('2024-01-22').toISOString(),
+      documentId: '1',
+      estimatedHours: 4,
+      actualHours: 2,
+      tags: ['review', 'urgent']
+    },
+    {
+      id: '2',
+      title: 'Update NDA Template',
+      description: 'Incorporate new privacy clauses into standard NDA template',
+      status: 'todo',
+      priority: 'medium',
+      assignedTo: 'Legal Team',
+      assignedBy: 'Umar',
+      createdAt: new Date('2024-01-18').toISOString(),
+      updatedAt: new Date('2024-01-18').toISOString(),
+      estimatedHours: 2,
+      tags: ['template', 'update']
+    }
+  ];
+
   async createTask(taskData: CreateTaskData): Promise<TaskData> {
     try {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('User not authenticated');
-
-      const newTask = {
-        id: uuidv4(),
+      const newTask: TaskData = {
+        id: Date.now().toString(),
         title: taskData.title,
         description: taskData.description,
-        status: 'todo' as const,
+        status: 'todo',
         priority: taskData.priority,
-        due_date: taskData.dueDate?.toISOString(),
-        assigned_to: taskData.assignedTo,
-        assigned_by: user.user.id,
-        document_id: taskData.documentId,
-        estimated_hours: taskData.estimatedHours,
+        dueDate: taskData.dueDate?.toISOString(),
+        assignedTo: taskData.assignedTo,
+        assignedBy: 'current-user-id',
+        documentId: taskData.documentId,
+        estimatedHours: taskData.estimatedHours,
         tags: taskData.tags || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert(newTask)
-        .select()
-        .single();
+      this.mockTasks.push(newTask);
 
-      if (error) throw error;
-      return this.mapToTaskData(data);
+      // Send N8N webhook
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.taskCreated(mockUser, newTask);
+
+      return newTask;
     } catch (error) {
       console.error('Error creating task:', error);
       throw error;
@@ -65,23 +99,17 @@ class TaskService {
 
   async getTasks(status?: string, assignedTo?: string): Promise<TaskData[]> {
     try {
-      let query = supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let filteredTasks = [...this.mockTasks];
 
       if (status) {
-        query = query.eq('status', status);
+        filteredTasks = filteredTasks.filter(task => task.status === status);
       }
 
       if (assignedTo) {
-        query = query.eq('assigned_to', assignedTo);
+        filteredTasks = filteredTasks.filter(task => task.assignedTo === assignedTo);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-
-      return data.map(this.mapToTaskData);
+      return filteredTasks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (error) {
       console.error('Error fetching tasks:', error);
       throw error;
@@ -90,14 +118,7 @@ class TaskService {
 
   async getTask(id: string): Promise<TaskData | null> {
     try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-      return data ? this.mapToTaskData(data) : null;
+      return this.mockTasks.find(task => task.id === id) || null;
     } catch (error) {
       console.error('Error fetching task:', error);
       throw error;
@@ -106,29 +127,28 @@ class TaskService {
 
   async updateTask(id: string, updates: Partial<TaskData>): Promise<TaskData> {
     try {
-      const updateData: any = {
-        updated_at: new Date().toISOString(),
+      const taskIndex = this.mockTasks.findIndex(task => task.id === id);
+      if (taskIndex === -1) throw new Error('Task not found');
+
+      const oldTask = this.mockTasks[taskIndex];
+      const updatedTask = {
+        ...oldTask,
+        ...updates,
+        updatedAt: new Date().toISOString(),
       };
 
-      if (updates.title) updateData.title = updates.title;
-      if (updates.description) updateData.description = updates.description;
-      if (updates.status) updateData.status = updates.status;
-      if (updates.priority) updateData.priority = updates.priority;
-      if (updates.dueDate) updateData.due_date = updates.dueDate;
-      if (updates.assignedTo) updateData.assigned_to = updates.assignedTo;
-      if (updates.estimatedHours !== undefined) updateData.estimated_hours = updates.estimatedHours;
-      if (updates.actualHours !== undefined) updateData.actual_hours = updates.actualHours;
-      if (updates.tags) updateData.tags = updates.tags;
+      this.mockTasks[taskIndex] = updatedTask;
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
+      // Send N8N webhook for task update
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.taskUpdated(mockUser, updatedTask, updates);
 
-      if (error) throw error;
-      return this.mapToTaskData(data);
+      return updatedTask;
     } catch (error) {
       console.error('Error updating task:', error);
       throw error;
@@ -137,12 +157,20 @@ class TaskService {
 
   async deleteTask(id: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', id);
+      const taskIndex = this.mockTasks.findIndex(task => task.id === id);
+      if (taskIndex === -1) throw new Error('Task not found');
 
-      if (error) throw error;
+      const task = this.mockTasks[taskIndex];
+      this.mockTasks.splice(taskIndex, 1);
+
+      // Send N8N webhook
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.taskDeleted(mockUser, task);
     } catch (error) {
       console.error('Error deleting task:', error);
       throw error;
@@ -151,24 +179,23 @@ class TaskService {
 
   async completeTask(id: string, actualHours?: number): Promise<TaskData> {
     try {
-      const updateData: any = {
+      const updates: Partial<TaskData> = {
         status: 'completed',
-        updated_at: new Date().toISOString(),
+        actualHours,
       };
 
-      if (actualHours !== undefined) {
-        updateData.actual_hours = actualHours;
-      }
+      const updatedTask = await this.updateTask(id, updates);
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
+      // Send N8N webhook for task completion
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.taskCompleted(mockUser, updatedTask);
 
-      if (error) throw error;
-      return this.mapToTaskData(data);
+      return updatedTask;
     } catch (error) {
       console.error('Error completing task:', error);
       throw error;
@@ -177,37 +204,11 @@ class TaskService {
 
   async getTasksByDocument(documentId: string): Promise<TaskData[]> {
     try {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('document_id', documentId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data.map(this.mapToTaskData);
+      return this.mockTasks.filter(task => task.documentId === documentId);
     } catch (error) {
       console.error('Error fetching tasks by document:', error);
       throw error;
     }
-  }
-
-  private mapToTaskData(data: any): TaskData {
-    return {
-      id: data.id,
-      title: data.title,
-      description: data.description,
-      status: data.status,
-      priority: data.priority,
-      dueDate: data.due_date,
-      assignedTo: data.assigned_to,
-      assignedBy: data.assigned_by,
-      documentId: data.document_id,
-      estimatedHours: data.estimated_hours,
-      actualHours: data.actual_hours,
-      tags: data.tags || [],
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
   }
 }
 

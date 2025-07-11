@@ -1,19 +1,96 @@
-import React, { useState } from 'react';
-import { Plus, Calendar, User, Flag, CheckCircle, Clock } from 'lucide-react';
-import { mockTasks } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { Plus, Calendar, User, Flag, CheckCircle, Clock, Edit, Trash2 } from 'lucide-react';
+import { taskService, TaskData, CreateTaskData } from '../services/taskService';
 
 export default function Tasks() {
   const [activeTab, setActiveTab] = useState<'todo' | 'completed'>('todo');
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newTask, setNewTask] = useState<CreateTaskData>({
+    title: '',
+    description: '',
+    priority: 'medium',
+    assignedTo: '',
+    tags: []
+  });
 
-  const todoTasks = mockTasks.filter(task => task.status === 'todo');
-  const completedTasks = mockTasks.filter(task => task.status === 'completed');
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  const loadTasks = async () => {
+    try {
+      setLoading(true);
+      const allTasks = await taskService.getTasks();
+      setTasks(allTasks);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const todoTasks = tasks.filter(task => task.status !== 'completed');
+  const completedTasks = tasks.filter(task => task.status === 'completed');
+
+  const handleCreateTask = async () => {
+    try {
+      if (!newTask.title.trim() || !newTask.assignedTo.trim()) {
+        alert('Please fill in all required fields');
+        return;
+      }
+
+      await taskService.createTask(newTask);
+      setShowNewTaskForm(false);
+      setNewTask({
+        title: '',
+        description: '',
+        priority: 'medium',
+        assignedTo: '',
+        tags: []
+      });
+      await loadTasks();
+    } catch (error) {
+      console.error('Error creating task:', error);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      await taskService.completeTask(taskId);
+      await loadTasks();
+    } catch (error) {
+      console.error('Error completing task:', error);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      if (confirm('Are you sure you want to delete this task?')) {
+        await taskService.deleteTask(taskId);
+        await loadTasks();
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, status: TaskData['status']) => {
+    try {
+      await taskService.updateTask(taskId, { status });
+      await loadTasks();
+    } catch (error) {
+      console.error('Error updating task status:', error);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     const colors = {
       high: 'text-red-600 bg-red-50',
       medium: 'text-yellow-600 bg-yellow-50',
-      low: 'text-green-600 bg-green-50'
+      low: 'text-green-600 bg-green-50',
+      urgent: 'text-purple-600 bg-purple-50'
     };
     return colors[priority as keyof typeof colors] || colors.low;
   };
@@ -21,6 +98,14 @@ export default function Tasks() {
   const getPriorityIcon = (priority: string) => {
     return <Flag size={14} />;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -45,47 +130,82 @@ export default function Tasks() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Task</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
               <input
                 type="text"
+                value={newTask.title}
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter task title"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <select 
+                value={newTask.priority}
+                onChange={(e) => setNewTask({...newTask, priority: e.target.value as any})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
+                <option value="urgent">Urgent</option>
               </select>
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
               <textarea
                 rows={3}
+                value={newTask.description}
+                onChange={(e) => setNewTask({...newTask, description: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter task description"
-              ></textarea>
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
               <input
                 type="date"
+                onChange={(e) => setNewTask({...newTask, dueDate: e.target.value ? new Date(e.target.value) : undefined})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Assign To</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Assign To *</label>
               <input
                 type="text"
+                value={newTask.assignedTo}
+                onChange={(e) => setNewTask({...newTask, assignedTo: e.target.value})}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter assignee name"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Estimated Hours</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                onChange={(e) => setNewTask({...newTask, estimatedHours: e.target.value ? parseFloat(e.target.value) : undefined})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tags (comma separated)</label>
+              <input
+                type="text"
+                onChange={(e) => setNewTask({...newTask, tags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag)})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="urgent, review, legal"
+              />
+            </div>
           </div>
           <div className="flex items-center space-x-3 mt-6">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button
+              onClick={handleCreateTask}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
               Create Task
             </button>
             <button
@@ -133,7 +253,7 @@ export default function Tasks() {
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-900 mb-2">{task.title}</h4>
                         <p className="text-sm text-gray-600 mb-3">{task.description}</p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                        <div className="flex items-center space-x-4 text-sm text-gray-500 mb-2">
                           <div className="flex items-center space-x-1">
                             <User size={14} />
                             <span>{task.assignedTo}</span>
@@ -141,7 +261,7 @@ export default function Tasks() {
                           {task.dueDate && (
                             <div className="flex items-center space-x-1">
                               <Calendar size={14} />
-                              <span>{task.dueDate.toLocaleDateString()}</span>
+                              <span>{new Date(task.dueDate).toLocaleDateString()}</span>
                             </div>
                           )}
                           <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${getPriorityColor(task.priority)}`}>
@@ -149,10 +269,42 @@ export default function Tasks() {
                             <span className="capitalize">{task.priority}</span>
                           </div>
                         </div>
+                        {task.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {task.tags.map((tag, index) => (
+                              <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <CheckCircle size={20} className="text-gray-400 hover:text-green-600" />
-                      </button>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <select
+                          value={task.status}
+                          onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value as TaskData['status'])}
+                          className="text-xs border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="todo">To Do</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="review">Review</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                        <button
+                          onClick={() => handleCompleteTask(task.id)}
+                          className="p-2 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
+                          title="Mark as Complete"
+                        >
+                          <CheckCircle size={20} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
+                          title="Delete Task"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -182,8 +334,11 @@ export default function Tasks() {
                           </div>
                           <div className="flex items-center space-x-1">
                             <Calendar size={14} />
-                            <span>Completed {task.createdAt.toLocaleDateString()}</span>
+                            <span>Completed {new Date(task.updatedAt).toLocaleDateString()}</span>
                           </div>
+                          {task.actualHours && (
+                            <span>{task.actualHours}h actual</span>
+                          )}
                         </div>
                       </div>
                       <CheckCircle size={20} className="text-green-600" />

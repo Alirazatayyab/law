@@ -1,13 +1,44 @@
-import React, { useState } from 'react';
-import { Search, Filter, Upload, FolderPlus, Grid, List, Download, Eye, Trash2, MoreHorizontal, FileText } from 'lucide-react';
-import { mockDocuments, mockFolders } from '../data/mockData';
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Upload, FolderPlus, Grid, List, Download, Eye, Trash2, MoreHorizontal, FileText, Share, Edit } from 'lucide-react';
+import { documentService, DocumentMetadata } from '../services/documentService';
+import DocumentViewer from '../components/DocumentViewer';
+import FileUploader from '../components/FileUploader';
 
 export default function Repository() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentMetadata | null>(null);
+  const [showViewer, setShowViewer] = useState(false);
+  const [showUploader, setShowUploader] = useState(false);
 
-  const filteredDocuments = mockDocuments.filter(doc =>
+  const mockFolders = [
+    { id: '1', name: 'Active Contracts', documentCount: 15 },
+    { id: '2', name: 'Templates', documentCount: 8 },
+    { id: '3', name: 'Legal Documents', documentCount: 23 },
+    { id: '4', name: 'HR Files', documentCount: 12 },
+    { id: '5', name: 'Archive', documentCount: 42 }
+  ];
+
+  useEffect(() => {
+    loadDocuments();
+  }, [selectedFolder]);
+
+  const loadDocuments = async () => {
+    try {
+      setLoading(true);
+      const docs = await documentService.getDocuments(selectedFolder || undefined);
+      setDocuments(docs);
+    } catch (error) {
+      console.error('Error loading documents:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredDocuments = documents.filter(doc =>
     doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -32,6 +63,41 @@ export default function Repository() {
     return colors[status as keyof typeof colors] || colors.unknown;
   };
 
+  const handleViewDocument = (document: DocumentMetadata) => {
+    setSelectedDocument(document);
+    setShowViewer(true);
+  };
+
+  const handleDownloadDocument = async (document: DocumentMetadata) => {
+    try {
+      await documentService.downloadDocument(document.id);
+    } catch (error) {
+      console.error('Error downloading document:', error);
+    }
+  };
+
+  const handleDeleteDocument = async (document: DocumentMetadata) => {
+    try {
+      await documentService.deleteDocument(document.id);
+      await loadDocuments(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting document:', error);
+    }
+  };
+
+  const handleUploadComplete = (uploadedDocuments: any[]) => {
+    setShowUploader(false);
+    loadDocuments(); // Refresh the list
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Header */}
@@ -44,7 +110,10 @@ export default function Repository() {
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button 
+              onClick={() => setShowUploader(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
               <Upload size={16} />
               <span>Upload Documents</span>
             </button>
@@ -153,18 +222,36 @@ export default function Repository() {
                             {doc.status}
                           </span>
                         </td>
-                        <td className="p-4 text-sm text-gray-600">{formatFileSize(doc.size)}</td>
-                        <td className="p-4 text-sm text-gray-600">{doc.updatedAt.toLocaleDateString()}</td>
+                        <td className="p-4 text-sm text-gray-600">{formatFileSize(doc.fileSize)}</td>
+                        <td className="p-4 text-sm text-gray-600">{new Date(doc.updatedAt).toLocaleDateString()}</td>
                         <td className="p-4">
                           <div className="flex items-center space-x-2">
-                            <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                            <button 
+                              onClick={() => handleViewDocument(doc)}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              title="View"
+                            >
                               <Eye size={16} />
                             </button>
-                            <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                            <button 
+                              onClick={() => handleDownloadDocument(doc)}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              title="Download"
+                            >
                               <Download size={16} />
                             </button>
-                            <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                              <MoreHorizontal size={16} />
+                            <button className="p-1 hover:bg-gray-100 rounded transition-colors" title="Share">
+                              <Share size={16} />
+                            </button>
+                            <button className="p-1 hover:bg-gray-100 rounded transition-colors" title="Edit">
+                              <Edit size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteDocument(doc)}
+                              className="p-1 hover:bg-red-50 text-red-600 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -185,13 +272,29 @@ export default function Repository() {
                     </div>
                     <h4 className="font-medium text-gray-900 mb-2 line-clamp-2">{doc.name}</h4>
                     <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-                      <span>{formatFileSize(doc.size)}</span>
+                      <span>{formatFileSize(doc.fileSize)}</span>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(doc.status)}`}>
                         {doc.status}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400">
-                      Modified {doc.updatedAt.toLocaleDateString()}
+                    <div className="text-xs text-gray-400 mb-3">
+                      Modified {new Date(doc.updatedAt).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => handleViewDocument(doc)}
+                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Eye size={14} />
+                        <span>View</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDownloadDocument(doc)}
+                        className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="Download"
+                      >
+                        <Download size={16} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -200,6 +303,55 @@ export default function Repository() {
           </div>
         </div>
       </div>
+
+      {/* Document Viewer */}
+      {selectedDocument && (
+        <DocumentViewer
+          document={selectedDocument}
+          isOpen={showViewer}
+          onClose={() => {
+            setShowViewer(false);
+            setSelectedDocument(null);
+          }}
+          onDelete={() => {
+            handleDeleteDocument(selectedDocument);
+            setShowViewer(false);
+            setSelectedDocument(null);
+          }}
+        />
+      )}
+
+      {/* File Uploader Modal */}
+      {showUploader && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Upload Documents</h3>
+                <button
+                  onClick={() => setShowUploader(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <FileUploader
+                folderId={selectedFolder || undefined}
+                onUploadComplete={handleUploadComplete}
+                onUploadError={(error) => console.error('Upload error:', error)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {filteredDocuments.length === 0 && !loading && (
+        <div className="text-center py-12">
+          <FileText className="mx-auto text-gray-400 mb-4" size={48} />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No documents found</h3>
+          <p className="text-gray-600">Upload your first document to get started.</p>
+        </div>
+      )}
     </div>
   );
 }

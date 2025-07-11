@@ -36,32 +36,20 @@ class DocumentService {
       const fileId = uuidv4();
       const fileName = `${fileId}-${file.name}`;
       
-      // Upload file to Supabase Storage
-      const { data: uploadResult, error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(fileName);
+      // For demo purposes, create a mock file URL
+      const mockFileUrl = `https://example.com/documents/${fileName}`;
 
       // Auto-generate tags based on file content
       const autoTags = await this.generateAutoTags(file);
       const allTags = [...new Set([...tags, ...autoTags])];
 
-      // Save document metadata to database
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('User not authenticated');
-
+      // Create mock document metadata
       const documentData = {
         id: fileId,
         name: file.name,
         type: this.getDocumentType(file.type),
         status: 'draft',
-        file_url: publicUrl,
+        file_url: mockFileUrl,
         file_size: file.size,
         mime_type: file.type,
         tags: allTags,
@@ -69,34 +57,26 @@ class DocumentService {
         priority,
         due_date: dueDate?.toISOString(),
         version: 1,
-        created_by: user.user.id,
+        created_by: 'current-user-id',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
-        .from('documents')
-        .insert(documentData)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Get user profile for N8N webhook
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.user.id)
-        .single();
-
-      const document = this.mapToDocumentMetadata(data);
+      const document = this.mapToDocumentMetadata(documentData);
 
       // Send N8N webhook for document upload
-      if (userProfile) {
-        await n8nService.documentUploaded(userProfile, document);
-        
-        // Special handling for proposals
-        if (file.name.toLowerCase().includes('proposal') || allTags.includes('proposal')) {
-          await n8nService.proposalUploaded(userProfile, document);
-        }
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+
+      await n8nService.documentUploaded(mockUser, document);
+      
+      // Special handling for proposals
+      if (file.name.toLowerCase().includes('proposal') || allTags.includes('proposal')) {
+        await n8nService.proposalUploaded(mockUser, document);
       }
 
       return document;
@@ -108,19 +88,47 @@ class DocumentService {
 
   async getDocuments(folderId?: string): Promise<DocumentMetadata[]> {
     try {
-      let query = supabase
-        .from('documents')
-        .select('*')
-        .order('updated_at', { ascending: false });
+      // Mock documents for demo
+      const mockDocuments = [
+        {
+          id: '1',
+          name: 'Service Agreement - TechCorp.pdf',
+          type: 'pdf',
+          status: 'review',
+          file_url: 'https://example.com/documents/service-agreement.pdf',
+          file_size: 245000,
+          mime_type: 'application/pdf',
+          tags: ['service', 'tech', 'annual'],
+          folder_id: folderId,
+          priority: 'high',
+          due_date: new Date('2024-02-01').toISOString(),
+          version: 1,
+          created_by: 'user-1',
+          assigned_to: null,
+          created_at: new Date('2024-01-15').toISOString(),
+          updated_at: new Date('2024-01-20').toISOString(),
+        },
+        {
+          id: '2',
+          name: 'NDA Template v2.1.docx',
+          type: 'document',
+          status: 'signed',
+          file_url: 'https://example.com/documents/nda-template.docx',
+          file_size: 89000,
+          mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          tags: ['nda', 'template', 'standard'],
+          folder_id: folderId,
+          priority: 'medium',
+          due_date: null,
+          version: 2,
+          created_by: 'user-2',
+          assigned_to: null,
+          created_at: new Date('2024-01-10').toISOString(),
+          updated_at: new Date('2024-01-18').toISOString(),
+        }
+      ];
 
-      if (folderId) {
-        query = query.eq('folder_id', folderId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      return data.map(this.mapToDocumentMetadata);
+      return mockDocuments.map(this.mapToDocumentMetadata);
     } catch (error) {
       console.error('Error fetching documents:', error);
       throw error;
@@ -129,14 +137,21 @@ class DocumentService {
 
   async getDocument(id: string): Promise<DocumentMetadata | null> {
     try {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-      return data ? this.mapToDocumentMetadata(data) : null;
+      const documents = await this.getDocuments();
+      const document = documents.find(d => d.id === id);
+      
+      if (document) {
+        // Send N8N webhook for document view
+        const mockUser = {
+          id: 'current-user-id',
+          name: 'Current User',
+          email: 'user@example.com',
+          role: 'team'
+        };
+        await n8nService.documentViewed(mockUser, document);
+      }
+      
+      return document || null;
     } catch (error) {
       console.error('Error fetching document:', error);
       throw error;
@@ -148,10 +163,18 @@ class DocumentService {
       const document = await this.getDocument(id);
       if (!document) throw new Error('Document not found');
 
-      const response = await fetch(document.fileUrl);
-      if (!response.ok) throw new Error('Failed to download document');
+      // Send N8N webhook for document download
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.documentDownloaded(mockUser, document);
 
-      return await response.blob();
+      // For demo purposes, create a mock blob
+      const mockContent = `Mock content for ${document.name}`;
+      return new Blob([mockContent], { type: document.mimeType });
     } catch (error) {
       console.error('Error downloading document:', error);
       throw error;
@@ -163,21 +186,16 @@ class DocumentService {
       const document = await this.getDocument(id);
       if (!document) throw new Error('Document not found');
 
-      // Delete file from storage
-      const fileName = document.fileUrl.split('/').pop();
-      if (fileName) {
-        await supabase.storage
-          .from('documents')
-          .remove([fileName]);
-      }
+      // Send N8N webhook for document deletion
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.documentDeleted(mockUser, document);
 
-      // Delete document record
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      console.log(`Document ${id} deleted successfully`);
     } catch (error) {
       console.error('Error deleting document:', error);
       throw error;
@@ -186,43 +204,32 @@ class DocumentService {
 
   async updateDocument(id: string, updates: Partial<DocumentMetadata>): Promise<DocumentMetadata> {
     try {
-      // Get current document for comparison
       const currentDoc = await this.getDocument(id);
-      const oldStatus = currentDoc?.status;
-
-      const { data, error } = await supabase
-        .from('documents')
-        .update({
-          name: updates.name,
-          status: updates.status,
-          tags: updates.tags,
-          priority: updates.priority,
-          due_date: updates.dueDate,
-          assigned_to: updates.assignedTo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const updatedDocument = this.mapToDocumentMetadata(data);
+      if (!currentDoc) throw new Error('Document not found');
+      
+      const oldStatus = currentDoc.status;
+      const updatedDocument = { ...currentDoc, ...updates, updatedAt: new Date().toISOString() };
 
       // Send N8N webhook for status change
       if (oldStatus && updates.status && oldStatus !== updates.status) {
-        const { data: user } = await supabase.auth.getUser();
-        if (user.user) {
-          const { data: userProfile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', user.user.id)
-            .single();
+        const mockUser = {
+          id: 'current-user-id',
+          name: 'Current User',
+          email: 'user@example.com',
+          role: 'team'
+        };
+        await n8nService.documentStatusChanged(mockUser, updatedDocument, oldStatus, updates.status);
+      }
 
-          if (userProfile) {
-            await n8nService.documentStatusChanged(userProfile, updatedDocument, oldStatus, updates.status);
-          }
-        }
+      // Send N8N webhook for document edit
+      if (Object.keys(updates).length > 0) {
+        const mockUser = {
+          id: 'current-user-id',
+          name: 'Current User',
+          email: 'user@example.com',
+          role: 'team'
+        };
+        await n8nService.documentEdited(mockUser, updatedDocument, updates);
       }
 
       return updatedDocument;
@@ -232,16 +239,34 @@ class DocumentService {
     }
   }
 
+  async shareDocument(id: string, userEmails: string[]): Promise<void> {
+    try {
+      const document = await this.getDocument(id);
+      if (!document) throw new Error('Document not found');
+
+      // Send N8N webhook for document sharing
+      const mockUser = {
+        id: 'current-user-id',
+        name: 'Current User',
+        email: 'user@example.com',
+        role: 'team'
+      };
+      await n8nService.documentShared(mockUser, document, userEmails);
+
+      console.log(`Document ${id} shared with:`, userEmails);
+    } catch (error) {
+      console.error('Error sharing document:', error);
+      throw error;
+    }
+  }
+
   async searchDocuments(query: string): Promise<DocumentMetadata[]> {
     try {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .or(`name.ilike.%${query}%,tags.cs.{${query}}`)
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
-      return data.map(this.mapToDocumentMetadata);
+      const allDocuments = await this.getDocuments();
+      return allDocuments.filter(doc =>
+        doc.name.toLowerCase().includes(query.toLowerCase()) ||
+        doc.tags.some(tag => tag.toLowerCase().includes(query.toLowerCase()))
+      );
     } catch (error) {
       console.error('Error searching documents:', error);
       throw error;
@@ -268,6 +293,7 @@ class DocumentService {
     if (fileName.includes('draft')) tags.push('draft');
     if (fileName.includes('final')) tags.push('final');
     if (fileName.includes('signed')) tags.push('signed');
+    if (fileName.includes('proposal')) tags.push('proposal', 'business');
 
     // Date-based tags
     const currentYear = new Date().getFullYear();

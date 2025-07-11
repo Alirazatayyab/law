@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { userService, UserProfile } from '../services/userService';
+import { n8nService } from '../services/n8nService';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -63,15 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          const user = await userService.getCurrentUser();
-          if (user) {
-            dispatch({ type: 'AUTH_SUCCESS', payload: user });
-          } else {
-            dispatch({ type: 'AUTH_FAILURE' });
-          }
+        // Check for stored user data
+        const storedUser = localStorage.getItem('pocketlaw_user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          dispatch({ type: 'AUTH_SUCCESS', payload: user });
         } else {
           dispatch({ type: 'AUTH_FAILURE' });
         }
@@ -82,30 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     initializeAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const user = await userService.getCurrentUser();
-        if (user) {
-          dispatch({ type: 'AUTH_SUCCESS', payload: user });
-        } else {
-          dispatch({ type: 'AUTH_FAILURE' });
-        }
-      } else if (event === 'SIGNED_OUT') {
-        dispatch({ type: 'LOGOUT' });
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     dispatch({ type: 'AUTH_START' });
     try {
-      // For demo purposes, create a mock user if using demo credentials
+      // Demo credentials
       if (email === 'umar@pocketlaw.com' && password === 'password') {
         const mockUser: UserProfile = {
           id: '1',
@@ -120,23 +98,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           lastLogin: new Date().toISOString(),
           isActive: true
         };
+        
+        // Store user data
+        localStorage.setItem('pocketlaw_user', JSON.stringify(mockUser));
+        
+        // Send N8N webhook for login
+        await n8nService.systemLogin(mockUser);
+        
         dispatch({ type: 'AUTH_SUCCESS', payload: mockUser });
         return;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      const user = await userService.getCurrentUser();
-      if (user) {
-        dispatch({ type: 'AUTH_SUCCESS', payload: user });
-      } else {
-        throw new Error('Failed to get user profile');
+      // Additional demo users
+      if (email === 'team@pocketlaw.com' && password === 'password') {
+        const teamUser: UserProfile = {
+          id: '2',
+          email: 'team@pocketlaw.com',
+          name: 'Team Member',
+          role: 'team',
+          department: 'Legal',
+          phone: '+1 (555) 123-4568',
+          bio: 'Team member focused on document management and client collaboration.',
+          createdAt: new Date('2023-06-01').toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+          isActive: true
+        };
+        
+        localStorage.setItem('pocketlaw_user', JSON.stringify(teamUser));
+        await n8nService.systemLogin(teamUser);
+        dispatch({ type: 'AUTH_SUCCESS', payload: teamUser });
+        return;
       }
+
+      if (email === 'client@pocketlaw.com' && password === 'password') {
+        const clientUser: UserProfile = {
+          id: '3',
+          email: 'client@pocketlaw.com',
+          name: 'Client User',
+          role: 'client',
+          department: 'External',
+          phone: '+1 (555) 123-4569',
+          bio: 'External client with limited access to assigned documents.',
+          createdAt: new Date('2023-09-01').toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+          isActive: true
+        };
+        
+        localStorage.setItem('pocketlaw_user', JSON.stringify(clientUser));
+        await n8nService.systemLogin(clientUser);
+        dispatch({ type: 'AUTH_SUCCESS', payload: clientUser });
+        return;
+      }
+
+      throw new Error('Invalid credentials');
     } catch (error) {
       dispatch({ type: 'AUTH_FAILURE' });
       throw error;
@@ -146,31 +162,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, userData: any) => {
     dispatch({ type: 'AUTH_START' });
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // Mock signup - in real app this would create a new user
+      const newUser: UserProfile = {
+        id: Date.now().toString(),
         email,
-        password,
-        options: {
-          data: userData
-        }
-      });
+        name: userData.name || email.split('@')[0],
+        role: 'team',
+        department: userData.department || '',
+        phone: userData.phone || '',
+        bio: userData.bio || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        isActive: true
+      };
 
-      if (error) throw error;
-
-      // User will be signed in automatically after email confirmation
+      localStorage.setItem('pocketlaw_user', JSON.stringify(newUser));
+      await n8nService.systemLogin(newUser);
+      dispatch({ type: 'AUTH_SUCCESS', payload: newUser });
     } catch (error) {
       dispatch({ type: 'AUTH_FAILURE' });
       throw error;
     }
   };
 
-  const logout = () => {
-    supabase.auth.signOut();
+  const logout = async () => {
+    try {
+      if (state.user) {
+        await n8nService.systemLogout(state.user);
+      }
+    } catch (error) {
+      console.error('Error sending logout webhook:', error);
+    }
+    
+    localStorage.removeItem('pocketlaw_user');
     dispatch({ type: 'LOGOUT' });
   };
 
   const updateProfile = async (userData: any) => {
     try {
-      const updatedUser = await userService.updateProfile(userData);
+      if (!state.user) throw new Error('No user logged in');
+      
+      const updatedUser = { ...state.user, ...userData, updatedAt: new Date().toISOString() };
+      localStorage.setItem('pocketlaw_user', JSON.stringify(updatedUser));
+      
+      // Send N8N webhook for profile update
+      await n8nService.userProfileUpdated(updatedUser, userData);
+      
       dispatch({ type: 'UPDATE_USER', payload: updatedUser });
     } catch (error) {
       throw error;
