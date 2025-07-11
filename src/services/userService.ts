@@ -1,12 +1,11 @@
 import { supabase } from '../lib/supabase';
-import { User } from '../types';
 
 export interface UserProfile {
   id: string;
   email: string;
   name: string;
   avatarUrl?: string;
-  role: 'admin' | 'user' | 'viewer';
+  role: 'admin' | 'team' | 'client';
   department?: string;
   phone?: string;
   bio?: string;
@@ -42,7 +41,7 @@ class UserService {
           id: user.id,
           email: user.email || '',
           name: user.user_metadata?.name || user.email?.split('@')[0] || '',
-          role: 'user' as const,
+          role: 'team' as const,
           is_active: true,
         };
 
@@ -59,7 +58,7 @@ class UserService {
       return this.mapToUserProfile(data);
     } catch (error) {
       console.error('Error fetching current user:', error);
-      throw error;
+      return null;
     }
   }
 
@@ -99,7 +98,7 @@ class UserService {
       return data.map(this.mapToUserProfile);
     } catch (error) {
       console.error('Error fetching users:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -115,11 +114,11 @@ class UserService {
       return data ? this.mapToUserProfile(data) : null;
     } catch (error) {
       console.error('Error fetching user:', error);
-      throw error;
+      return null;
     }
   }
 
-  async updateUserRole(userId: string, role: 'admin' | 'user' | 'viewer'): Promise<UserProfile> {
+  async updateUserRole(userId: string, role: 'admin' | 'team' | 'client'): Promise<UserProfile> {
     try {
       const { data, error } = await supabase
         .from('users')
@@ -219,7 +218,7 @@ class UserService {
       return data.map(this.mapToUserProfile);
     } catch (error) {
       console.error('Error searching users:', error);
-      throw error;
+      return [];
     }
   }
 

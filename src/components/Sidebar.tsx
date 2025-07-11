@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, X, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigationItems } from './RoleBasedNavigation';
 import { usePermissions } from '../hooks/usePermissions';
@@ -148,7 +148,15 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
           <div className="px-6 py-4 border-t border-gray-200 mt-auto">
             <div className="flex items-center space-x-3">
               <div className="w-9 h-9 bg-blue-500 rounded-full flex items-center justify-center">
-                <User className="text-white" size={16} />
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="w-9 h-9 rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="text-white" size={16} />
+                )}
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>

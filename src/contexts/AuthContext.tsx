@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { AuthState } from '../types';
 import { supabase } from '../lib/supabase';
 import { userService, UserProfile } from '../services/userService';
 
@@ -106,6 +105,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     dispatch({ type: 'AUTH_START' });
     try {
+      // For demo purposes, create a mock user if using demo credentials
+      if (email === 'umar@pocketlaw.com' && password === 'password') {
+        const mockUser: UserProfile = {
+          id: '1',
+          email: 'umar@pocketlaw.com',
+          name: 'Umar Khan',
+          role: 'admin',
+          department: 'Legal',
+          phone: '+1 (555) 123-4567',
+          bio: 'Legal professional with 10+ years of experience in contract management and corporate law.',
+          createdAt: new Date('2023-01-01').toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+          isActive: true
+        };
+        dispatch({ type: 'AUTH_SUCCESS', payload: mockUser });
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,

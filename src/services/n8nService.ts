@@ -11,8 +11,8 @@ interface N8NWebhookPayload {
 }
 
 class N8NService {
-  private readonly testUrl = 'https://mzm987.app.n8n.cloud/webhook-test/proposal-upload';
-  private readonly productionUrl = 'https://mzm987.app.n8n.cloud/webhook/proposal-upload';
+  private readonly testUrl = import.meta.env.VITE_N8N_TEST_URL || 'https://mzm987.app.n8n.cloud/webhook-test/proposal-upload';
+  private readonly productionUrl = import.meta.env.VITE_N8N_PRODUCTION_URL || 'https://mzm987.app.n8n.cloud/webhook/proposal-upload';
   private readonly isDevelopment = import.meta.env.DEV;
 
   private get webhookUrl() {

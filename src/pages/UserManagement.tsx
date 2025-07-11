@@ -53,7 +53,7 @@ export default function UserManagement() {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-  const handleRoleChange = async (userId: string, newRole: 'admin' | 'user' | 'viewer') => {
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'team' | 'client') => {
     try {
       const targetUser = users.find(u => u.id === userId);
       const oldRole = targetUser?.role;
@@ -110,8 +110,8 @@ export default function UserManagement() {
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'admin': return <Shield size={14} />;
-      case 'user': return <User size={14} />;
-      case 'viewer': return <User size={14} />;
+      case 'team': return <User size={14} />;
+      case 'client': return <User size={14} />;
       default: return <User size={14} />;
     }
   };
@@ -413,9 +413,9 @@ export default function UserManagement() {
                   onChange={(e) => handleRoleChange(selectedUser.id, e.target.value as any)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="user">User</option>
+                  <option value="team">Team Member</option>
                   <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="client">Client</option>
                 </select>
               </div>
 

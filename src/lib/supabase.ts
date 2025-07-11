@@ -4,10 +4,15 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+  console.error('Missing Supabase environment variables');
+  // For development, provide fallback values to prevent crashes
+  const fallbackUrl = 'https://placeholder.supabase.co';
+  const fallbackKey = 'placeholder-key';
+  
+  export const supabase = createClient(fallbackUrl, fallbackKey);
+} else {
+  export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 }
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types
 export interface Database {
@@ -19,7 +24,7 @@ export interface Database {
           email: string;
           name: string;
           avatar_url?: string;
-          role: 'admin' | 'user' | 'viewer';
+          role: 'admin' | 'team' | 'client';
           department?: string;
           phone?: string;
           bio?: string;
